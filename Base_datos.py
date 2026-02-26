@@ -1,0 +1,62 @@
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
+from libreria_cafe_edd_db.sesion import Base, crear_sesion, engine
+
+def guardados_masivos(lista, funcion):
+    for i in lista:
+        funcion(i)
+
+
+class ReservaDB(Base):
+    __tablename__ = 'reservas'
+
+    id_reserva = Column(Integer, primary_key=True, autoincrement=True)
+    id_cliente = Column(Integer, ForeignKey('cliente.id'), nullable=False)
+    id_mesa = Column(String, ForeignKey('mesas.id_mesa'))
+    cant_personas = Column(Integer, nullable=False)
+    fecha_cita = Column(DateTime, nullable=False)
+    fecha_fin = Column(DateTime, nullable=False)
+    creado_el = Column(DateTime, nullable=False)
+    
+    mesa = relationship("MesaDB", back_populates = "reservas")
+    cliente = relationship("Cliente")
+    
+    
+class MesaDB(Base):
+    __tablename__ = 'mesas'
+    id_mesa = Column(String, primary_key=True)
+    tipo = Column(String)                      
+    capacidad = Column(Integer)
+    reservas = relationship("ReservaDB", back_populates="mesa")
+
+Base().metadata.create_all(engine)
+    
+
+def crear_mesa(datos):
+    sesion = crear_sesion()
+    mesa = MesaDB(id_mesa = datos[0],
+                tipo = datos[1],
+                capacidad = 6)
+    existencia = sesion.query(MesaDB).filter_by(id_mesa=mesa.id_mesa).first()
+    
+    if existencia:
+        print(f"La mesa {existencia.id_mesa} ya esta registrada en la base")
+        sesion.close()
+    else:
+        try:
+            sesion.add(mesa)
+            sesion.commit()
+            print(f"Mesa {mesa.id_mesa} Guardada exitosamente.")
+        except Exception as e:
+            sesion.rollback()
+            print(f"Error al guardar: {e}")
+        finally:
+            sesion.close()
+lista = []
+contador = 1
+for tipo in ["Estudio", "Cafe"]:
+    for _ in range(10):
+        lista.append([contador, tipo])
+        contador += 1
+
+guardados_masivos(lista, crear_mesa)
