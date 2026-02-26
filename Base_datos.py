@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from libreria_cafe_edd_db.sesion import Base, crear_sesion, engine
 
-def guardados_masivos(lista, funcion):
+def Guardado_multiple(lista, funcion):
     for i in lista:
         funcion(i)
 
@@ -15,8 +15,9 @@ class ReservaDB(Base):
     id_mesa = Column(String, ForeignKey('mesas.id_mesa'))
     cant_personas = Column(Integer, nullable=False)
     fecha_cita = Column(DateTime, nullable=False)
-    fecha_fin = Column(DateTime, nullable=False)
-    creado_el = Column(DateTime, nullable=False)
+    hora_inicio = Column(DateTime, nullable=False)
+    hora_fin = Column(DateTime, nullable=False)
+    fecha_creacion = Column(DateTime, nullable=False)
     
     mesa = relationship("MesaDB", back_populates = "reservas")
     cliente = relationship("Cliente")
@@ -24,7 +25,7 @@ class ReservaDB(Base):
     
 class MesaDB(Base):
     __tablename__ = 'mesas'
-    id_mesa = Column(String, primary_key=True)
+    id_mesa = Column(Integer, primary_key=True, autoincrement=True)
     tipo = Column(String)                      
     capacidad = Column(Integer)
     reservas = relationship("ReservaDB", back_populates="mesa")
@@ -52,11 +53,18 @@ def crear_mesa(datos):
             print(f"Error al guardar: {e}")
         finally:
             sesion.close()
+
+"""
+    Creando una tabla mesas en la base de datos y agregando 10 mesas de dos diferentes tipos
+    Estudio y Cafe
+"""
 lista = []
+
 contador = 1
+
 for tipo in ["Estudio", "Cafe"]:
     for _ in range(10):
         lista.append([contador, tipo])
         contador += 1
 
-guardados_masivos(lista, crear_mesa)
+guardado_multiple(lista, crear_mesa)

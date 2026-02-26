@@ -2,14 +2,14 @@ from libreria_cafe_edd_db.sesion import crear_sesion
 from enum import Enum
 from libreria_cafe_edd_db import Cliente
 from sqlalchemy import and_
-from Base_datos import ReservaDB, MesaDB, guardados_masivos
+from Base_datos import ReservaDB, MesaDB, guardado_multiple
 import datetime
 
 
 class Gestor_reserva:
     def __init__(self, sesion_fun):
         self.crear_sesion = sesion_fun
-    
+
     def calcular_duracion(self, tipo, cant_personas):
         match (tipo.capitalize(), cant_personas):
             case ("Estudio", p) if p <= 2: return 3.0
@@ -21,12 +21,13 @@ class Gestor_reserva:
             
             case _: return 2.0
 
-    def verificar_disponibilidad(self, sesion, id_mesa, inicio, fin):
+    def verificar_disponibilidad(self, sesion, id_mesa, fecha_cita, hora_inicio, hora_fin):
         cruce = sesion.query(ReservaDB).filter(
             and_(
                 ReservaDB.id_mesa == id_mesa,
-                ReservaDB.fecha_cita < fin,
-                ReservaDB.fecha_fin > inicio
+                ReservaDB.fecha_cita,
+                ReservaDB.hora_inicio < hora_fin,
+                ReservaDB.hora_fin > hora_inicio
             )
         ).first()
         return cruce is None # True si no hay nadie ocupándola
@@ -61,8 +62,9 @@ class Gestor_reserva:
                 reservas = sesion.query(ReservaDB).filter(
                     and_(
                         ReservaDB.id_mesa == mesa.id_mesa,
-                        ReservaDB.fecha_cita >= apertura,
-                        ReservaDB.fecha_cita < cierre
+                        ReservaDB.fecha_cita == fecha_busqueda,
+                        ReservaDB.hora_inicio >= apertura,
+                        ReservaDB.hora_final < cierre
                     )
                 ).order_by(ReservaDB.fecha_cita).all()
 
@@ -81,7 +83,7 @@ class Gestor_reserva:
 
                 # 4. Formatear resultado
                 horarios_texto = " | ".join(libres) if libres else "SIN DISPONIBILIDAD"
-                print(f"Mesa {mesa.id_mesa.ljust(2)} [{mesa.tipo.ljust(7)}]: {horarios_texto}")
+                print(f"Mesa {str(mesa.id_mesa).ljust(2)} [{mesa.tipo.ljust(7)}]: {horarios_texto}")
 
         except Exception as e:
             print(f"Error al consultar disponibilidad: {e}")
@@ -113,46 +115,25 @@ class Gestor_reserva:
             sesion.commit()
             
             id_visual = str(nueva.id_reserva).zfill(4)
-            return f"✅ Reserva {id_visual} exitosa. Mesa asignada: {mesa_libre.id_mesa} ({tipo})"
+            return f"Reserva {id_visual} exitosa. Mesa asignada: {mesa_libre.id_mesa} ({tipo})"
 
         except Exception as e:
             sesion.rollback()
-            return f"🔥 Error crítico: {e}"
+            return f"Error crítico: {e}"
         finally:
             sesion.close()
             
+
 class EstadoMesa(Enum):
     DISPONIBLE = "Disponible"
     OCUPADA = "Ocupada"
     RESERVADA = "Reservada"
     LIMPIANDO = "Limpiando"
 
-mesas = []
-contador = 1
-
-def mostrar(lista):
-    for i in lista:
-        print(i)
-
-
-datos_lote_masivo = [
-    [29554133, 0, "Jesuz", datetime.date(2001,4,13), "Perosnal", "Pozuelos", 4124220876],
-    [10203040, 2, "Carlos Rodriguez", datetime.date(1985, 5, 12), "Suministros C.R.", "Barcelona", "04125559988"],
-    [50607080, 3, "Lucia Fernandez", datetime.date(1993, 11, 24), "Personal", "Lecheria", "04246661122"],
-    [90102030, 4, "Andres Bello", datetime.date(1978, 2, 10), "Inversiones AB", "Guanta", "04163334455"],
-    [40506070, 5, "Mariana Silva", datetime.date(2000, 7, 15), "Estudiante", "Pozuelos", "04129990011"],
-    [80901020, 6, "Roberto Gomez", datetime.date(1982, 3, 30), "Taller El Chamo", "Puerto La Cruz", "04267778899"],
-    [30405060, 7, "Elena Mendez", datetime.date(1996, 9, 5), "Personal", "Barcelona", "04141112233"],
-    [70809010, 8, "Sandro Botticelli", datetime.date(1990, 1, 20), "Artes Graficas", "Lecheria", "04124445566"],
-    [20304050, 9, "Beatriz Luna", datetime.date(2002, 12, 12), "Personal", "Pozuelos", "04168887744"],
-    [60708090, 10, "Jose Gregorio", datetime.date(1987, 6, 28), "Constructor J.G.", "Guanta", "04242223344"],
-    [11223344, 11, "Patricia Sosa", datetime.date(1994, 10, 8), "Marketing Digital", "Puerto La Cruz", "04120001122"],
-    [26612048, 1, "eloy", datetime.date(1999,1,27), "Personal", "Pozuelos", 4261348815]
-]
-
 def guardar_cliente(datos):
     sesion = crear_sesion()
-    cliente = Cliente(id = datos[0],
+    cliente = Cliente(
+                id = datos[0],
                 id_membresia = datos[1],
                 nombre = datos[2],
                 cedula = datos[0],
@@ -178,20 +159,35 @@ def guardar_cliente(datos):
             print(f"Error al guardar: {e}")
         finally:
             sesion.close()
-            
 
-guardados_masivos(datos_lote_masivo, guardar_cliente)
+mesas = []
+contador = 1
 
+def mostrar(lista):
+    for i in lista:
+        print(i)
+
+
+datos_lote_masivo = [
+    [29554133, 0, "Jesuz", datetime.date(2001,4,13), "Perosnal", "Pozuelos", 4124220876],
+    [10203040, 2, "Carlos Rodriguez", datetime.date(1985, 5, 12), "Suministros C.R.", "Barcelona", "04125559988"],
+    [50607080, 3, "Lucia Fernandez", datetime.date(1993, 11, 24), "Personal", "Lecheria", "04246661122"],
+    [90102030, 4, "Andres Bello", datetime.date(1978, 2, 10), "Inversiones AB", "Guanta", "04163334455"],
+]
+
+guardado_multiple(datos_lote_masivo, guardar_cliente)
 
 gestor = Gestor_reserva(crear_sesion)
 if __name__ == "__main__":
     
     
-    hoy_4pm = datetime.datetime.now().replace(hour=10, minute=30, second=0, microsecond=0)
-    print(gestor.realizar_reserva(id_cliente=29554133,
-                                personas = 3,
-                                tipo = "Estudio",
-                                fecha_cita = hoy_4pm
-                                ))
+    hoy_4pm = datetime.datetime.now().replace(hour=10, minute=30, second=0)
+    print(
+        gestor.realizar_reserva(
+            id_cliente=29554133,
+            personas = 3,
+            tipo = "estudio",
+            fecha_cita = hoy_4pm
+    ))
 
 gestor.consultar_disponibilidad_fecha(datetime.date(2026,2,25))
