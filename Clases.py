@@ -2,7 +2,7 @@ from libreria_cafe_edd_db.sesion import crear_sesion
 from enum import Enum
 from libreria_cafe_edd_db import Cliente
 from sqlalchemy import and_
-from Base_datos import ReservaDB, MesaDB, guardado_multiple
+from Base_datos import ReservaDB, MesaDB, Guardado_multiple
 import datetime
 
 
@@ -25,57 +25,59 @@ class Gestor_reserva:
         cruce = sesion.query(ReservaDB).filter(
             and_(
                 ReservaDB.id_mesa == id_mesa,
-                ReservaDB.fecha_cita,
+                ReservaDB.fecha_cita == fecha_cita,
                 ReservaDB.hora_inicio < hora_fin,
                 ReservaDB.hora_fin > hora_inicio
             )
         ).first()
         return cruce is None # True si no hay nadie ocupándola
         
-    def buscar_mesa_disponible(self, sesion, tipo, inicio, fin):
+    def buscar_mesa_disponible(self, sesion, tipo, fecha_cita, hora_inicio, hora_fin):
         mesas_del_tipo = sesion.query(MesaDB).filter_by(tipo=tipo.capitalize()).all()
         
         for mesa in mesas_del_tipo:
-            if self.verificar_disponibilidad(sesion, mesa.id_mesa, inicio, fin):
+            if self.verificar_disponibilidad(sesion, mesa.id_mesa, fecha_cita, hora_inicio, hora_fin):
                 return mesa 
         return None
     
-    def consultar_disponibilidad_fecha(self, fecha_busqueda=None):
+    def consultar_disponibilidad_fecha(self, hora_inicio, hora_fin, fecha_busqueda=datetime.datetime.today()):
         """
         Muestra los horarios libres de cada mesa para una fecha específica.
-        Formato de fecha_busqueda: datetime.date o None para hoy.
+        Formato de fecha_busqueda: datetime.date.
         """
-        if fecha_busqueda is None:
-            fecha_busqueda = datetime.date.today()
         
         sesion = self.crear_sesion()
         # Definimos el rango de operación del café (08:00 a 20:00)
-        apertura = datetime.datetime.combine(fecha_busqueda, datetime.time(8, 0))
-        cierre = datetime.datetime.combine(fecha_busqueda, datetime.time(20, 0))
+        apertura = datetime.datetime.combine(fecha_busqueda, datetime.time(8, 0)).strftime("%H:%M")
+        cierre = datetime.datetime.combine(fecha_busqueda, datetime.time(20, 0)).strftime("%H:%M")
         
         print(f"\n--- DISPONIBILIDAD PARA EL DÍA: {fecha_busqueda} ---")
         
         try:
             mesas = sesion.query(MesaDB).all()
             for mesa in mesas:
+                print("buscando mesa")
                 # 1. Buscamos reservas de esta mesa en la fecha indicada
                 reservas = sesion.query(ReservaDB).filter(
                     and_(
                         ReservaDB.id_mesa == mesa.id_mesa,
                         ReservaDB.fecha_cita == fecha_busqueda,
                         ReservaDB.hora_inicio >= apertura,
-                        ReservaDB.hora_final < cierre
+                        ReservaDB.hora_fin < cierre
                     )
                 ).order_by(ReservaDB.fecha_cita).all()
+                print("no hubo error buscando las mesas")
 
                 # 2. Lógica de "Huecos": Calculamos espacios libres entre reservas
                 inicio_bloque = apertura
                 libres = []
 
                 for res in reservas:
-                    if res.fecha_cita > inicio_bloque:
+                    if res.hora_inicio > inicio_bloque:
+                        print("por ahora sin peos")
                         libres.append(f"{inicio_bloque.strftime('%H:%M')} a {res.fecha_cita.strftime('%H:%M')}")
-                    inicio_bloque = res.fecha_fin
+                        print("hubo un peo")
+                    inicio_bloque = res.hora_fin
 
                 # 3. Espacio final desde la última reserva hasta el cierre
                 if inicio_bloque < cierre:
@@ -90,29 +92,28 @@ class Gestor_reserva:
         finally:
             sesion.close()
 
-    def realizar_reserva(self, id_cliente, personas, tipo, fecha_cita):
+    def realizar_reserva(self, id_cliente, personas, tipo, fecha_cita, hora_inicio, hora_fin):
         """Método principal para orquestar la reserva automática"""
         sesion = self.crear_sesion()
         try:
-            duracion = self.calcular_duracion(tipo, personas)
-            fecha_fin = fecha_cita + datetime.timedelta(hours=duracion)
-            
-            mesa_libre = self.buscar_mesa_disponible(sesion, tipo, fecha_cita, fecha_fin)
+            mesa_libre = self.buscar_mesa_disponible(sesion, tipo, fecha_cita, hora_inicio, hora_fin)
             
             if not mesa_libre:
-                return f"No hay mesas tipo '{tipo}' disponibles para {fecha_cita.strftime('%H:%M')}."
+                return f"No hay mesas tipo '{tipo}' disponibles para {hora_inicio}."
 
             nueva = ReservaDB(
                 id_cliente = id_cliente,
                 id_mesa = mesa_libre.id_mesa,
                 cant_personas = personas,
                 fecha_cita = fecha_cita,
-                fecha_fin = fecha_fin,
-                creado_el = datetime.datetime.now()
+                hora_inicio = hora_inicio,
+                hora_fin = hora_fin,
+                fecha_creacion = datetime.datetime.now()
             )
             
             sesion.add(nueva)
             sesion.commit()
+            print("se cago")
             
             id_visual = str(nueva.id_reserva).zfill(4)
             return f"Reserva {id_visual} exitosa. Mesa asignada: {mesa_libre.id_mesa} ({tipo})"
@@ -175,19 +176,24 @@ datos_lote_masivo = [
     [90102030, 4, "Andres Bello", datetime.date(1978, 2, 10), "Inversiones AB", "Guanta", "04163334455"],
 ]
 
-guardado_multiple(datos_lote_masivo, guardar_cliente)
+Guardado_multiple(datos_lote_masivo, guardar_cliente)
 
 gestor = Gestor_reserva(crear_sesion)
 if __name__ == "__main__":
     
     
-    hoy_4pm = datetime.datetime.now().replace(hour=10, minute=30, second=0)
+    hoy = datetime.datetime.now().strftime('%d-%m-%y')
+    hora_1 = datetime.datetime.combine(datetime.datetime.now(), datetime.time(23, 30)).strftime("%H:%M")
+    hora_2 = datetime.datetime.combine(datetime.datetime.now(), datetime.time(00, 00)).strftime("%H:%M")
+
     print(
         gestor.realizar_reserva(
             id_cliente=29554133,
             personas = 3,
             tipo = "estudio",
-            fecha_cita = hoy_4pm
+            hora_inicio = hora_1,
+            hora_fin = hora_2,
+            fecha_cita = hoy
     ))
 
-gestor.consultar_disponibilidad_fecha(datetime.date(2026,2,25))
+gestor.consultar_disponibilidad_fecha("23:30", "00:00")

@@ -15,9 +15,9 @@ class ReservaDB(Base):
     id_mesa = Column(String, ForeignKey('mesas.id_mesa'))
     cant_personas = Column(Integer, nullable=False)
     fecha_cita = Column(DateTime, nullable=False)
-    hora_inicio = Column(DateTime, nullable=False)
-    hora_fin = Column(DateTime, nullable=False)
-    fecha_creacion = Column(DateTime, nullable=False)
+    hora_inicio = Column(String, nullable=False)
+    hora_fin = Column(String, nullable=False)
+    fecha_creacion = Column(String, nullable=False)
     
     mesa = relationship("MesaDB", back_populates = "reservas")
     cliente = relationship("Cliente")
@@ -67,4 +67,4 @@ for tipo in ["Estudio", "Cafe"]:
         lista.append([contador, tipo])
         contador += 1
 
-guardado_multiple(lista, crear_mesa)
+Guardado_multiple(lista, crear_mesa)
