@@ -17,7 +17,7 @@ class ReservaDB(Base):
     fecha_cita = Column(DateTime, nullable=False)
     hora_inicio = Column(String, nullable=False)
     hora_fin = Column(String, nullable=False)
-    fecha_creacion = Column(String, nullable=False)
+    fecha_creacion = Column(DateTime, nullable=False)
     
     mesa = relationship("MesaDB", back_populates = "reservas")
     cliente = relationship("Cliente")
