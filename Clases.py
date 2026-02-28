@@ -41,7 +41,7 @@ class Gestor_reserva:
 
             nueva = ReservaDB(
                 id_cliente = id_cliente,
-                id_mesa = mesa_libre[0]["id_mesa"],
+                id_mesa = mesa_libre[0].get("id_mesa"),
                 cant_personas = personas,
                 fecha_cita = fecha_cita,
                 hora_inicio = hora_inicio,
