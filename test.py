@@ -33,8 +33,10 @@ def menu_cli():
             fin = input("Hora fin (HH:MM): ")
             
             f_obj = datetime.datetime.strptime(fecha, "%Y-%m-%d").date() if fecha else None
-            res = gestor.consultar_disponibilidad(f_obj, inicio, fin)
-            print("\nResultado:", res)
+            # CAMBIO: Se corrigió la llamada a la función indicando qué parámetro corresponde a qué valor,
+            # ya que de lo contrario Python enviaba f_obj al parámetro 'sesion' provocando un error.
+            res = gestor.consultar_disponibilidad(sesion=None, fecha_cita=f_obj, hora_inicio=inicio, hora_fin=fin)
+            #print("\nResultado:", res)
 
             print("\n" + "*"*30)
             if isinstance(res, list):

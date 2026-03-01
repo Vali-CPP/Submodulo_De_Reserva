@@ -26,6 +26,12 @@ class Gestor_reserva:
             if fecha_cita is None:
                 fecha_cita = datetime.date.today()
             
+            # CAMBIO: La base de datos guarda 'fecha_cita' como DateTime (ej. 2026-03-01 00:00:00).
+            # Si se manda un objeto Date (2026-03-01), SQLite no lo reconoce al buscarlo.
+            # Por tanto, convertimos 'fecha_cita' a datetime exacto si viene como date.
+            if type(fecha_cita) is datetime.date:
+                fecha_cita = datetime.datetime(fecha_cita.year, fecha_cita.month, fecha_cita.day)
+            
             if hora_inicio is None:
                 hora_inicio = "08:00"
             
@@ -36,12 +42,21 @@ class Gestor_reserva:
             mesa_libre = self.consultar_disponibilidad(sesion, fecha_cita, hora_inicio, hora_fin)
             print("Si pase esta parte, no te creas")
             
-            if not mesa_libre:
+            # CAMBIO: Verificamos si `consultar_disponibilidad` devolvió un error (string) o una lista vacía
+            if isinstance(mesa_libre, str) or not mesa_libre:
+                return f"No hay mesas disponibles para el {fecha_cita} a las {hora_inicio}."
+
+            # CAMBIO: Agregamos el filtrado para entregar específicamente el 'tipo' de mesa que pidió el cliente.
+            mesas_tipo = [m for m in mesa_libre if m.get("tipo", "").lower() == tipo.lower()]
+            if not mesas_tipo:
                 return f"No hay mesas tipo '{tipo}' disponibles para {hora_inicio}."
+            
+            # CAMBIO: Seleccionamos la primera mesa que cumple con los requisitos
+            mesa_asignada = mesas_tipo[0]
 
             nueva = ReservaDB(
                 id_cliente = id_cliente,
-                id_mesa = mesa_libre[0].get("id_mesa"),
+                id_mesa = mesa_asignada.get("id_mesa"), # Asegurado el acceso al diccionario
                 cant_personas = personas,
                 fecha_cita = fecha_cita,
                 hora_inicio = hora_inicio,
@@ -53,7 +68,10 @@ class Gestor_reserva:
             sesion.commit()
             
             id_visual = str(nueva.id_reserva).zfill(4)
-            return f"Reserva {id_visual} exitosa. Mesa asignada: {mesa_libre.id_mesa} ({tipo})"
+            # CAMBIO: Corrección del error 'list' object has no attribute 'id_mesa'.
+            # Se cambió 'mesa_libre.id_mesa' (mesa_libre es una lista) por 'mesa_asignada.get("id_mesa")' 
+            # (mesa_asignada es un diccionario individual de la mesa).
+            return f"Reserva {id_visual} exitosa. Mesa asignada: {mesa_asignada.get('id_mesa')} ({tipo})"
 
         except Exception as e:
             sesion.rollback()
@@ -65,6 +83,11 @@ class Gestor_reserva:
         """Método para eliminar una reserva por fecha y hora de inicio"""
         sesion = self.crear_sesion()
         try:
+            # CAMBIO: Adaptamos la fecha enviada (Date) al formato de la tabla (DateTime)
+            # para que la consulta SQL pueda encontrar coincidencias.
+            if type(fecha_cita) is datetime.date:
+                fecha_cita = datetime.datetime(fecha_cita.year, fecha_cita.month, fecha_cita.day)
+
             reserva = sesion.query(ReservaDB).filter(
                 ReservaDB.fecha_cita == fecha_cita,
                 ReservaDB.hora_inicio == hora_inicio
@@ -86,11 +109,23 @@ class Gestor_reserva:
             sesion.close()
         
 
-    def consultar_disponibilidad(self, sesion, fecha_cita=None, hora_inicio=None, hora_fin=None):
+    # CAMBIO: 'sesion' ahora es opcional. Si no se provee, la función creará una sesión propia.
+    def consultar_disponibilidad(self, sesion=None, fecha_cita=None, hora_inicio=None, hora_fin=None):
         """Consulta todas las mesas disponibles para una fecha y rango horario específicos"""
+        # CAMBIO: Validar si la sesión fue creada dentro de esta función
+        sesion_propia = False
+        if sesion is None:
+            sesion = self.crear_sesion()
+            sesion_propia = True
+
         try:
             if fecha_cita is None:
                 fecha_cita = datetime.date.today()
+            
+            # CAMBIO: Al igual que en las otras funciones, aseguramos usar DateTime 
+            # para consultar correctamente las reservas ocupadas en la DB.
+            if type(fecha_cita) is datetime.date:
+                fecha_cita = datetime.datetime(fecha_cita.year, fecha_cita.month, fecha_cita.day)
             
             # Subconsulta para obtener los IDs de las mesas que ya tienen reservas en ese horario
             reservas_ocupadas = sesion.query(ReservaDB.id_mesa).filter(
@@ -120,6 +155,10 @@ class Gestor_reserva:
 
         except Exception as e:
             return f"Error al consultar disponibilidad: {e}"
+        finally:
+            # CAMBIO: Cerramos la sesión únicamente si fue creada por el propio método (es decir, desde test.py).
+            if sesion_propia:
+                sesion.close()
 
 
     def editar_reserva(self, id_reserva, personas=None, tipo=None, fecha_cita=None, hora_inicio=None, hora_fin=None):
@@ -135,18 +174,43 @@ class Gestor_reserva:
 
             # Determinar valores finales (nuevos o actuales) para validar disponibilidad
             n_fecha = fecha_cita if fecha_cita else reserva.fecha_cita
+            
+            # CAMBIO: Normalizamos la fecha a datetime si ingresa un date
+            if type(n_fecha) is datetime.date:
+                n_fecha = datetime.datetime(n_fecha.year, n_fecha.month, n_fecha.day)
+                
             n_inicio = hora_inicio if hora_inicio else reserva.hora_inicio
             n_fin = hora_fin if hora_fin else reserva.hora_fin
-            n_tipo = tipo if tipo else "estandar" # O el tipo actual si tuvieras relación con la tabla mesas
+            # CAMBIO: Usar reserva.mesa.tipo si no se provee un tipo nuevo, en lugar de dejar el valor inventado "estandar".
+            n_tipo = tipo if tipo else reserva.mesa.tipo
 
-            # Buscar nueva mesa si cambia el tipo, fecha o el horario
-            mesa_libre = self.buscar_mesa_disponible(sesion, n_tipo, n_fecha, n_inicio, n_fin)
+            # CAMBIO: Usar 'consultar_disponibilidad' en lugar de la función inexistente 'buscar_mesa_disponible'.
+            mesas_disponibles = self.consultar_disponibilidad(sesion, n_fecha, n_inicio, n_fin)
             
-            if not mesa_libre:
-                return "No hay mesas disponibles con los nuevos parámetros solicitados."
+            # CAMBIO: Validamos que, si el horario y fecha son exactamente los mismos, la propia 
+            # mesa actual va a salir como ocupada (por nosotros mismos en la base de datos).
+            # Para no perder nuestra reserva, la conservamos si se mantiene el horario y tipo de mesa.
+            mismo_horario = (n_fecha == reserva.fecha_cita and n_inicio == reserva.hora_inicio and n_fin == reserva.hora_fin)
+            
+            id_mesa_asignada = None
+            if isinstance(mesas_disponibles, str) or not mesas_disponibles:
+                if mismo_horario and n_tipo.lower() == reserva.mesa.tipo.lower():
+                    id_mesa_asignada = reserva.id_mesa
+                else:
+                    return "No hay mesas disponibles con los nuevos parámetros solicitados."
+            else:
+                # Filtrar mesas por tipo
+                mesas_tipo = [m for m in mesas_disponibles if m.get("tipo", "").lower() == n_tipo.lower()]
+                if not mesas_tipo:
+                    if mismo_horario and n_tipo.lower() == reserva.mesa.tipo.lower():
+                        id_mesa_asignada = reserva.id_mesa
+                    else:
+                        return f"No hay mesas tipo '{n_tipo}' disponibles para los parámetros solicitados."
+                else:
+                    id_mesa_asignada = mesas_tipo[0].get("id_mesa")
 
             # Aplicar cambios
-            reserva.id_mesa = mesa_libre.id_mesa
+            reserva.id_mesa = id_mesa_asignada
             reserva.cant_personas = personas if personas else reserva.cant_personas
             reserva.fecha_cita = n_fecha
             reserva.hora_inicio = n_inicio
@@ -154,7 +218,7 @@ class Gestor_reserva:
             
             sesion.commit()
             id_visual = str(id_reserva).zfill(4)
-            return f"Reserva {id_visual} actualizada exitosamente. Nueva mesa: {mesa_libre.id_mesa}"
+            return f"Reserva {id_visual} actualizada exitosamente. Nueva mesa: {id_mesa_asignada}"
 
         except Exception as e:
             sesion.rollback()
