@@ -12,7 +12,7 @@ class ReservaDB(Base):
 
     id_reserva = Column(Integer, primary_key=True, autoincrement=True)
     id_cliente = Column(Integer, ForeignKey('cliente.id'), nullable=False)
-    id_mesa = Column(String, ForeignKey('mesas.id_mesa'))
+    id_mesa = Column(Integer, ForeignKey('mesas.id_mesa')) #se cambio de tipo str a integer
     cant_personas = Column(Integer, nullable=False)
     fecha_cita = Column(DateTime, nullable=False)
     hora_inicio = Column(String, nullable=False)

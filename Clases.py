@@ -2,6 +2,7 @@ from libreria_cafe_edd_db.sesion import crear_sesion
 from libreria_cafe_edd_db import Cliente
 from sqlalchemy import and_
 from Base_datos import ReservaDB, MesaDB, Guardado_multiple
+from sqlalchemy import and_, func, cast, Date # Agrega func y Date a tus imports
 import datetime
 
 """
@@ -53,7 +54,7 @@ class Gestor_reserva:
             sesion.commit()
             
             id_visual = str(nueva.id_reserva).zfill(4)
-            return f"Reserva {id_visual} exitosa. Mesa asignada: {mesa_libre.id_mesa} ({tipo})"
+            return f"Reserva {id_visual} exitosa. Mesa asignada: {mesa_libre[0].get('id_mesa')} ({tipo})" #Solo se modifico mesa_libre aca
 
         except Exception as e:
             sesion.rollback()
@@ -87,24 +88,27 @@ class Gestor_reserva:
         
 
     def consultar_disponibilidad(self, sesion, fecha_cita=None, hora_inicio=None, hora_fin=None):
-        """Consulta todas las mesas disponibles para una fecha y rango horario específicos"""
         try:
             if fecha_cita is None:
                 fecha_cita = datetime.date.today()
             
-            # Subconsulta para obtener los IDs de las mesas que ya tienen reservas en ese horario
+            # Usamos func.date para comparar solo la FECHA, ignorando la hora del DateTime
             reservas_ocupadas = sesion.query(ReservaDB.id_mesa).filter(
-                ReservaDB.fecha_cita == fecha_cita
+                func.date(ReservaDB.fecha_cita) == fecha_cita
             )
             
+            # Solo aplicamos el filtro de hora si AMBOS valores existen
             if hora_inicio and hora_fin:
                 reservas_ocupadas = reservas_ocupadas.filter(
-                    (ReservaDB.hora_inicio < hora_fin) & (ReservaDB.hora_fin > hora_inicio)
+                    and_(
+                        ReservaDB.hora_inicio < hora_fin,
+                        ReservaDB.hora_fin > hora_inicio
+                    )
                 )
                 
             mesas_ocupadas_ids = [r.id_mesa for r in reservas_ocupadas.all()]
             
-            # Consultar mesas que NO estén en la lista de ocupadas
+            # Filtrar mesas que no estén en la lista de ocupadas
             mesas_disponibles = sesion.query(MesaDB).filter(
                 ~MesaDB.id_mesa.in_(mesas_ocupadas_ids)
             ).all()

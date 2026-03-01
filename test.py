@@ -33,8 +33,13 @@ def menu_cli():
             fin = input("Hora fin (HH:MM): ")
             
             f_obj = datetime.datetime.strptime(fecha, "%Y-%m-%d").date() if fecha else None
-            res = gestor.consultar_disponibilidad(f_obj, inicio, fin)
-            print("\nResultado:", res)
+            
+            # SOLUCIÓN: Crear la sesión, pasarla al método y cerrarla
+            sesion = crear_sesion() 
+            res = gestor.consultar_disponibilidad(sesion, f_obj, inicio, fin)
+            sesion.close()
+            
+            #print("\nResultado:", res)
 
             print("\n" + "*"*30)
             if isinstance(res, list):
