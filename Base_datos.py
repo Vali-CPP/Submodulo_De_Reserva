@@ -30,7 +30,8 @@ class MesaDB(Base):
     capacidad = Column(Integer)
     reservas = relationship("ReservaDB", back_populates="mesa")
 
-Base().metadata.create_all(engine)
+# CAMBIO: Usar directamente Base.metadata sin instanciar de forma incorrecta la clase Base()
+Base.metadata.create_all(engine)
     
 
 def crear_mesa(datos):

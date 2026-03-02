@@ -33,7 +33,8 @@ def menu_cli():
             fin = input("Hora fin (HH:MM): ")
             
             f_obj = datetime.datetime.strptime(fecha, "%Y-%m-%d").date() if fecha else None
-            res = gestor.consultar_disponibilidad(f_obj, inicio, fin)
+            # CAMBIO: Pasar los argumentos con su nombre usando kwargs para evitar colisión con el argumento "sesion"
+            res = gestor.consultar_disponibilidad(sesion=None, fecha_cita=f_obj, hora_inicio=inicio, hora_fin=fin)
             print("\nResultado:", res)
 
             print("\n" + "*"*30)

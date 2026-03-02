@@ -69,7 +69,8 @@ class Gestor_reserva:
             sesion.commit()
             
             id_visual = str(nueva.id_reserva).zfill(4)
-            return f"Reserva {id_visual} exitosa. Mesa asignada: {mesa_libre.id_mesa} ({tipo})"
+            # CAMBIO: Corregir acceso a 'mesa_libre', que es una lista temporal. Usamos el dict 'mesa_asignada'.
+            return f"Reserva {id_visual} exitosa. Mesa asignada: {mesa_asignada.get('id_mesa')} ({tipo})"
 
         except Exception as e:
             sesion.rollback()
@@ -107,8 +108,14 @@ class Gestor_reserva:
             sesion.close()
         
 
-    def consultar_disponibilidad(self, sesion, fecha_cita=None, hora_inicio=None, hora_fin=None):
+    def consultar_disponibilidad(self, sesion=None, fecha_cita=None, hora_inicio=None, hora_fin=None):
         """Consulta todas las mesas disponibles para una fecha y rango horario específicos"""
+        # CAMBIO: Identificar si la sesión fue pasada por parámetro; si no, crearla
+        sesion_propia = False
+        if sesion is None:
+            sesion = self.crear_sesion()
+            sesion_propia = True
+
         try:
             if fecha_cita is None:
                 fecha_cita = datetime.date.today()
